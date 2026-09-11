@@ -1,0 +1,62 @@
+---
+title: "Introduction to Machine Learning - HW 1"
+author: "maitmad"
+date: "2026-09-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#ASSIGNMENT 1 FOR INTRODUCTIONS TO MACHINE LEARNING
+
+# Using dataset on Aircraft Wildlife Strikes 1990-2015
+
+
+```{r}
+library(readxl)
+aircraft_strikes <- read_excel("~/Downloads/aircraft strikes.xlsx")
+```
+
+# descriptive statistics for quantitative variables
+
+```{r}
+summary(aircraft_strikes$`Incident Year`)  ## quantitative variable referring to year of incident
+summary(aircraft_strikes$`Incident Month`) ## quantitative variable referring to month of incident
+summary(aircraft_strikes$`Incident Day`)   ## quantitative variable referring to day of incident
+```
+
+# descriptive statistics for categorical variables
+
+```{r}
+aircraft_strikes$Operator <- as.factor(aircraft_strikes$Operator)
+summary(aircraft_strikes$Operator)
+table(aircraft_strikes$Operator)
+```
+
+#Transformation of variable Incident Year into smaller categories
+
+```{r}
+aircraft_strikes$`Incident Year` <- cut(aircraft_strikes$`Incident Year`,
+                                         breaks = c(-Inf, 1999, 2010, Inf),
+                                         labels = c("1999 or before", "2000 - 2010", "2011 and after"))
+table(aircraft_strikes$`Incident Year`)
+
+head(aircraft_strikes$`Incident Year`)
+tail(aircraft_strikes$`Incident Year`)
+```
+
+
+#Bar chart of flight phase the incident took place in
+```{r}
+table(aircraft_strikes$`Flight Phase`)
+barplot(table(aircraft_strikes$`Flight Phase`), main = "Aircraft Strikes by Phase of Flight", xlab = "Flight Phase", ylab = "Frequency", col = "blue", las = 3 )
+```
+#Scatterplot of Incident Year and Incident Month
+```{r}
+plot(aircraft_strikes$`Incident Year`, aircraft_strikes$`Incident Month`, main = "[Y Variable] vs [X Variable]", xlab = "[Incident Year]", ylab = "[Incident Month]", pch = 12, col = "green")
+```
+##End of Assignment
+
+
