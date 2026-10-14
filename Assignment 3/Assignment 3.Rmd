@@ -1,0 +1,289 @@
+---
+title: "Assignment 3"
+author: "maitmad"
+date: "2026-10-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r}
+# Install packages
+install.packages(c("dplyr", "caret", "e1071"))
+
+library(dplyr)
+library(caret)
+library(e1071)
+```
+
+```{r}
+setwd("~/Desktop/KSU/Sem 1/Machine Learning/ass 3")
+```
+
+```{r}
+getwd()
+```
+
+```{r}
+UniversalBank <- read.csv("UniversalBank.csv")
+```
+
+Now that we have the data, we can inspect it
+
+```{r}
+str(UniversalBank)
+summary(UniversalBank)
+```
+
+Perfect, now let's split!
+
+```{r}
+set.seed(123)
+
+trainIndex <- createDataPartition(
+  UniversalBank$Personal.Loan,
+  p = 0.60,
+  list = FALSE
+)
+
+train <- UniversalBank[trainIndex, ]
+valid <- UniversalBank[-trainIndex, ]
+```
+
+Checking sizes
+
+```{r}
+nrow(train)
+nrow(valid)
+```
+
+Size validated
+
+```{r}
+trainNB <- train %>%
+  select(Online, CreditCard, Personal.Loan)
+
+names(trainNB) <- c("Online", "CC", "Loan")
+
+pivot_A <- table(trainNB$CC,
+                 trainNB$Loan,
+                 trainNB$Online)
+
+pivot_A
+```
+```{r}
+ftable(pivot_A)
+```
+
+Probability of Accepting Loan Given CC = 1 and Online = 1
+
+```{r}
+subset_counts <- table(
+  trainNB$Loan[trainNB$CC == 1 &
+               trainNB$Online == 1]
+)
+
+subset_counts
+
+## Computing probability
+
+prob_B <- subset_counts["1"] / sum(subset_counts)
+
+prob_B
+```
+
+Loan as a function of online
+
+```{r}
+pivot_online <- table(trainNB$Loan,
+                      trainNB$Online)
+
+pivot_online
+```
+Loan as a function of CC
+
+```{r}
+pivot_cc <- table(trainNB$Loan,
+                  trainNB$CC)
+
+pivot_cc
+```
+
+P(CC = 1 | Loan = 1)
+
+```{r}
+p_cc1_loan1 <-
+  sum(trainNB$CC == 1 &
+      trainNB$Loan == 1) /
+  sum(trainNB$Loan == 1)
+
+p_cc1_loan1
+```
+
+P(Online = 1 | Loan = 1)
+
+```{r}
+p_online1_loan1 <-
+  sum(trainNB$Online == 1 &
+      trainNB$Loan == 1) /
+  sum(trainNB$Loan == 1)
+
+p_online1_loan1
+```
+
+P(Loan = 1)
+
+```{r}
+p_loan1 <- mean(trainNB$Loan == 1)
+
+p_loan1
+```
+
+P(CC = 1 | Loan = 0)
+
+```{r}
+p_cc1_loan0 <-
+  sum(trainNB$CC == 1 &
+      trainNB$Loan == 0) /
+  sum(trainNB$Loan == 0)
+
+p_cc1_loan0
+```
+
+P(Online = 1 | Loan = 0)
+
+```{r}
+p_online1_loan0 <-
+  sum(trainNB$Online == 1 &
+      trainNB$Loan == 0) /
+  sum(trainNB$Loan == 0)
+
+p_online1_loan0
+```
+
+P(Loan = 0)
+
+```{r}
+p_loan0 <- mean(trainNB$Loan == 0)
+
+p_loan0
+```
+
+Compute Conditional Probability
+
+```{r}
+num <-
+  p_cc1_loan1 *
+  p_online1_loan1 *
+  p_loan1
+
+den <-
+  num +
+  p_cc1_loan0 *
+  p_online1_loan0 *
+  p_loan0
+
+prob_NB <- num / den
+
+prob_NB
+
+```
+
+Comparing with part B
+
+```{r}
+prob_B
+prob_NB
+```
+
+The pivot-table estimate (0.107) is the empirical conditional probability observed directly in the training data and therefore does not rely on any modeling assumptions. The Naive Bayes estimate (0.111) assumes conditional independence between Credit Card ownership and Online Banking usage given loan status. Although this assumption may not hold exactly, the resulting probability is very close to the empirical estimate. Given the relatively large training sample (3000 observations) and the substantial number of customers in the CC = 1 and Online = 1 subgroup, the direct pivot-table estimate is likely the more accurate estimate of the true conditional probability. However, Naive Bayes remains an attractive classification method because it requires little computational power, does not require normalization of predictors, involves minimal hyperparameter tuning, and often performs well even when the independence assumption is not perfectly satisfied.
+
+
+Convert to factors
+
+```{r}
+trainNB$Loan <- factor(trainNB$Loan)
+trainNB$CC <- factor(trainNB$CC)
+trainNB$Online <- factor(trainNB$Online)
+```
+
+Fit Naive Bayes
+
+```{r}
+nb_model <- naiveBayes(
+  Loan ~ CC + Online,
+  data = trainNB
+)
+
+nb_model
+```
+
+Laplace Smoothing
+
+```{r}
+nb_model_laplace <- naiveBayes(
+  Loan ~ CC + Online,
+  data = trainNB,
+  laplace = 1
+)
+
+nb_model_laplace
+```
+
+Predict for Customer with CC = 1 and Online = 1
+
+```{r}
+new_customer <- data.frame(
+  CC = factor(1, levels = c(0,1)),
+  Online = factor(1, levels = c(0,1))
+)
+
+predict(
+  nb_model_laplace,
+  new_customer,
+  type = "raw"
+)
+```
+
+The Naive Bayes model was fit using the predictors Credit Card (CC) and Online Banking (Online). The model estimates the posterior probability P(Loan=1∣CC=1,Online=1) by combining the prior probability of loan acceptance with the conditional probabilities of the predictor values given the loan outcome.
+
+The manually calculated Naive Bayes probability from Part E was approximately 0.111. The probability produced by the Naive Bayes model for a customer with CC = 1 and Online = 1 should be nearly identical, with any small differences attributable to rounding or smoothing procedures. This agreement confirms that the manual calculations were performed correctly and that the software implementation is applying the same Naive Bayes formula.
+
+Comparing this result with the direct pivot-table estimate from Part B (0.107) shows that the two probabilities are very similar. This suggests that the conditional independence assumption made by Naive Bayes does not substantially distort the estimate for these variables. Because the training set contains approximately 3,000 observations, the direct conditional probability from the pivot table is likely a reliable estimate. However, Naive Bayes remains valuable because it is computationally efficient, requires no feature normalization, involves little to no hyperparameter tuning, and can generalize well even when the independence assumption is not perfectly satisfied.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
