@@ -1,0 +1,238 @@
+---
+title: "Assignment 4"
+author: "Muhammad Bilal Aitmad"
+date: "2026-10-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Loading packages
+
+```{r}
+library(readr)
+library(tidyverse)
+```
+
+
+Loading data
+
+```{r}
+setwd("~/Desktop/KSU/Sem 1/Machine Learning/ass 4")
+```
+
+```{r}
+getwd()
+
+pharma <- read_csv("pharmaceuticals.csv")
+```
+
+```{r}
+str(pharma)
+summary(pharma)
+```
+
+Normalizing numerical variables
+
+```{r}
+num.vars <- pharma[, c(
+  "Market_Cap",
+  "Beta",
+  "PE_Ratio",
+  "ROE",
+  "ROA",
+  "Asset_Turnover",
+  "Leverage",
+  "Rev_Growth",
+  "Net_Profit_Margin"
+)]
+
+num.scaled <- scale(num.vars)
+```
+
+```{r}
+library(cluster)
+
+sil.width <- numeric()
+
+for(k in 2:6)
+{
+  km <- kmeans(num.scaled,
+               centers = k,
+               nstart = 25)
+
+  sil <- silhouette(km$cluster,
+                    dist(num.scaled))
+
+  sil.width[k] <- mean(sil[,3])
+}
+
+sil.width[2:6]
+```
+
+
+Elbow plot
+
+```{r}
+wss <- numeric()
+
+for(k in 1:10)
+{
+  wss[k] <- kmeans(num.scaled,
+                   centers = k,
+                   nstart = 25)$tot.withinss
+}
+
+plot(1:10,
+     wss,
+     type = "b",
+     xlab = "Number of Clusters",
+     ylab = "Total Within Sum of Squares")
+```
+
+As k = 3 gives the best silhoutte value and the elbow curve is also relatively constant after k = 3, that becomes my choice of k to run the models. In k means clustering, we need to decide the hyperparameter before running the model
+
+```{r}
+set.seed(123)
+
+km3 <- kmeans(num.scaled,
+              centers = 3,
+              nstart = 25)
+
+km3
+
+```
+
+```{r}
+pharma$Cluster <- factor(km3$cluster)
+
+pharma[, c("Name", "Cluster")]
+```
+
+
+
+```{r}
+table(pharma$Cluster)
+```
+
+Cluster Centroids
+
+```{r}
+round(km3$centers, 2)
+```
+
+Cluster means in original units
+
+```{r}
+aggregate(num.vars,
+          by = list(Cluster = pharma$Cluster),
+          mean)
+```
+
+Part B: Interpretation of the clusters
+
+```{r}
+cluster.summary <- aggregate(
+  num.vars,
+  by = list(Cluster = pharma$Cluster),
+  mean)
+
+cluster.summary[,-1] <- round(cluster.summary[,-1], 2)
+
+cluster.summary
+```
+
+Interpretation
+
+Cluster 1: Speculative High Valuation Pharma firms
+
+Average Market Cap = $21.75 billion
+Highest P/E Ratio = 46.9
+Lowest ROE = 11.3%
+Lowest ROA = 5.1%
+Lowest Net Profit Margin = 6.65%
+Lowest Revenue Growth = 7.01%
+
+This cluster contains firms that are not producing particularly strong profitability results but are valued highly by investors, as indicated by the extremely high average P/E ratio.
+
+Cluster 2: Global Pharma Leaders
+
+Average Market Cap = $97.11 billion
+Highest ROE = 35.7%
+Highest ROA = 14.95%
+Highest Net Profit Margin = 20.17%
+Low leverage = 0.33
+Relatively low beta = 0.43
+
+Evident by existence of global leaders like Pfizer, this cluster contains the industry's largest and most established firms. These companies demonstrate superior profitability, efficient use of assets, strong shareholder returns.
+
+Cluster 3: Emerging Growth Firms
+
+Smallest Market Cap = $9.24 billion
+Highest Revenue Growth = 23.49%
+Highest Leverage = 1.25
+Higher Beta = 0.65
+
+These firms are much smaller than the industry leaders but demonstrate significantly stronger growth rates. Their higher leverage and beta indicate greater risk, while their rapid revenue growth suggests an aggressive expansion strategy.
+
+Part C:
+
+Median Recommendation vs clusters
+
+```{r}
+table(pharma$Cluster,
+      pharma$Median_Recommendation)
+
+round(
+  prop.table(
+    table(pharma$Cluster,
+          pharma$Median_Recommendation),
+    margin = 1
+  ),
+  2
+)
+```
+
+Exchange vs Cluster
+
+```{r}
+table(pharma$Cluster,
+      pharma$Location)
+
+round(
+  prop.table(
+    table(pharma$Cluster,
+          pharma$Location),
+    margin = 1
+  ),
+  2
+)
+```
+
+```{r}
+table(pharma$Cluster,
+      pharma$Exchange)
+
+round(
+  prop.table(
+    table(pharma$Cluster,
+          pharma$Exchange),
+    margin = 1
+  ),
+  2
+)
+```
+
+Cluster 1 mostly contains hold, moderate buy or strong buy. This means that analysts view them to have a strong upside or stable investments. The same is true for Cluster 2. Cluster 3 seems to be split between moderate buy and moderate sell. 
+
+Cluster 2 seems to be dominated by US, UK, and Switzerland. This means headquartered in strong economic zones. Cluster 1 is diversely spread. Cluster 3 seems to be usually headquartered in the US mostly as well which indicates strong funding for emerging firms with a high upside. 
+
+Almost every company across all clusters is listed on the NYSE. Because nearly all firms share the same exchange listing, exchange does not appear to be a meaningful variable for distinguishing clusters.
+
+Part D:
+
+Cluster 1 was labeled Speculative High Valuation Firms because it contains companies with high P/E ratios but relatively weak profitability. Cluster 2 was labeled Global Pharmaceutical Leaders because it includes the largest, most profitable, and most financially stable firms in the industry. Cluster 3 was labeled Emerging Growth Firms because it consists of smaller companies with high revenue growth and higher leverage levels, indicating an emphasis on expansion and future growth.
+
+
