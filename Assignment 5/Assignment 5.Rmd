@@ -1,0 +1,186 @@
+---
+title: "Assignment 5 ML"
+author: "Muhammad Bilal Aitmad"
+date: "2026-11-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+Loading directory
+
+```{r}
+setwd("/Users/muhammadbilalaitmad/Desktop/KSU/Sem 1/Machine Learning/ass 5")
+getwd()
+```
+
+```{r}
+library(cluster)
+library(stats)
+set.seed(1)
+```
+
+Loading Data
+
+```{r}
+cer <- read.csv("cereals.csv")
+```
+
+Three of the 77 cereals have missing values (one in carbo, one in sugars, two in potass), so 74 remain. I clustered on the 13 numeric variables (calories through rating), excluding name, mfr and type, after standardizing them with scale()
+
+```{r}
+cat("Rows before:", nrow(cer), "\n")
+print(colSums(is.na(cer)))
+# cereals have placeholder -1 for missing in the original dataset? check
+print(sapply(cer[,4:16], function(x) sum(x < 0)))
+cer <- na.omit(cer)
+cat("Rows after na.omit:", nrow(cer), "\n")
+rownames(cer) <- cer$name
+num <- cer[, 4:16]            # drop name, mfr, type
+num <- num[, sapply(num, is.numeric)]
+print(names(num))
+z <- scale(num)
+d <- dist(z, method = "euclidean")
+```
+
+```{r}
+# Agnes: agglomerative coefficient
+meths <- c("single","complete","average", "ward")
+ac <- sapply(meths, function(m) agnes(z, method = m)$ac)
+print(round(ac, 4))
+```
+
+Ward Linkage is the best method. It has the highest coefficient, meaning the strongest clustering structure. Single linkage is the worst because it chains observations together.
+
+```{r}
+best <- "ward"
+ag <- agnes(z, method = best)
+pltree(ag, cex = 0.5, hang = -1, main = "Agnes - Ward (normalized data)")
+rect.hclust(as.hclust(ag), k = 4, border = 2:5)
+```
+
+```{r}
+hc <- as.hclust(ag)
+# Heights of last merges and silhouette for k
+print(round(tail(hc$height, 10), 2))
+for (k in 2:8) {
+  cl <- cutree(hc, k)
+  cat("k =", k, " avg silhouette =", round(mean(silhouette(cl, d)[, 3]), 4), " sizes:", table(cl), "\n")
+}
+cer <- na.omit(cer)
+rownames(cer) <- cer$name
+num <- cer[, 4:16]
+z <- scale(num)
+hc <- as.hclust(agnes(z, method="ward"))
+K <- 4
+cl <- cutree(hc, K)
+cat("\n== Cluster means (original units) ==\n")
+print(round(aggregate(num, list(cluster=cl), mean)[,-1] |> cbind(n=as.vector(table(cl))), 2))
+cat("\n== Members ==\n")
+for (k in 1:K) cat("Cluster", k, ":", paste(rownames(num)[cl==k], collapse=", "), "\n")
+cat("\nMfr by cluster:\n"); print(table(cl, cer$mfr))
+```
+
+```{r}
+assign_centroid <- function(newz, cent) apply(newz, 1, function(r) which.min(colSums((t(cent)-r)^2)))
+stab <- function(seed, frac=0.5) {
+  set.seed(seed)
+  idx <- sample(nrow(z), round(nrow(z)*frac))
+  A <- z[idx,,drop=FALSE]; B <- z[-idx,,drop=FALSE]
+  clA <- cutree(hclust(dist(A), "ward.D2"), K)
+  cent <- apply(A, 2, function(c) tapply(c, clA, mean))
+  predB <- assign_centroid(B, cent)
+  # map to full-data clusters: compare with full cluster labels via best matching (centroids of A vs full-data centroids)
+  fullB <- cl[-idx]
+  # Align A's clusters to full clusters via the full-data labels of A's members (majority)
+  map <- sapply(1:K, function(k) { t <- table(factor(cl[idx][clA==k], levels=1:K)); which.max(t) })
+  mean(map[predB] == fullB)
+}
+cat("\n== Stability: 50/50 split, single seed ==\n"); print(stab(1))
+res <- sapply(1:200, stab)
+cat("Mean agreement over 200 random splits:", round(mean(res),3), " range:", round(range(res),3), "\n")
+cat("Same at k=2..6 (mean of 100 splits):\n")
+for (kk in 2:6) { K <- kk; cl <- cutree(hc, K); cat(" k=",kk," ", round(mean(sapply(1:100, stab)),3), "\n") }
+K <- 4; cl <- cutree(hc, K)
+```
+
+Q) How many clusters would I choose?
+
+Ans) k=4 gives clusters that are easy to interpret and reasonably stable
+
+Comment on Structure and Stability
+
+Structure: Cluster 1 is a tiny outlier group, and clusters 3 and 4 are the largest and most natural groups. Manufacturers do not separate cleanly, since every cluster except 1 mixes General Mills, Kellogg’s, Post and others. Clusters follow nutrition, and the consumer ratings line up with it (sugary cereals rate lowest, bran cereals highest).
+Stability test: I split the data 50/50 at random, ran Ward on partition A, assigned each record in B to the nearest A-centroid, and compared with the full-data clusters. Over 200 random splits the mean agreement was 78.7%, with a range of 38% to 100%. A single split (seed 1) gave 81%.
+Stability across k: Agreement was 76% at k=2, 67% at k=3, 79% at k=4, 78% at k=5 and 73% at k=6. So k=4 is among the most stable choices.
+Verdict: The clusters are moderately stable, not very stable. The three-member bran cluster and the boundary between clusters 2 and 4 cause most of the disagreement, so I would not treat individual assignments as firm.
+
+
+
+
+Rand-type check using flexible approach on seed 1 with Adjusted rand
+
+```{r}
+
+
+#Healthy cereals 
+
+vars <- c("calories","protein","fat","sodium","fiber","carbo","sugars","potass","vitamins")
+x <- cer[, vars]
+cat("SDs raw:\n"); print(round(apply(x,2,sd),2))
+for (mode in c("raw","scaled")) {
+  m <- if (mode=="raw") x else scale(x)
+  ag <- agnes(m, method="ward"); cat("\n##", mode, " ac =", round(ag$ac,3), "\n")
+  for (K in 3:4) {
+    cl <- cutree(as.hclust(ag), K)
+    cat("K =", K, "\n"); print(round(cbind(aggregate(x, list(cl), mean)[,-1], n=as.vector(table(cl)), rating=aggregate(cer$rating, list(cl), mean)$x),1))
+  }
+}
+ag <- agnes(scale(x), method="ward"); cl <- cutree(as.hclust(ag), 4)
+# pick healthy cluster: highest fiber/protein, lowest sugar & calories
+cm <- aggregate(x, list(cl), mean)
+cat("\nHealthy cluster members (scaled, K=4):\n")
+h <- which.min(cm$sugars + cm$calories/10 - cm$fiber*2 - cm$protein*2)
+cat("cluster",h,":\n"); print(rownames(x)[cl==h])
+cat("Mean rating in that cluster:", mean(cer$rating[cl==h]), "\n")
+```
+
+My recommendation is to normalize for the clustering, but to judge “healthy” from raw units.
+
+Why not raw units: The raw units differ wildly. Sodium (SD about 83 mg) and potassium (SD about 71 mg) would dominate protein and fat (SD about 1 g). On raw data the clusters are mostly “low-sodium vs high-sodium” groups.
+Choose variables on purpose: Use only the nutrition variables: calories, protein, fat, sodium, fiber, carbo, sugars, potass and vitamins. Drop shelf, weight and cups, which are not about health. Also drop rating, which is an outcome, not a nutrient.
+Judge on absolute levels: Z-scores are relative to this sample, and a cereal can be below average and still unhealthy. So read the cluster means in original units against absolute criteria such as low sugar and sodium and higher fiber and protein.
+
+With standardized nutrition variables and Ward at k=4, the results are:
+
+Cluster	and	Notes
+Cluster 1: 3 Observations |	Highest fiber and protein (the three bran cereals), but sodium is 177 mg
+Cluster 2: 39 Observations | High sugar (10.3 g) and calories (116)
+Cluster 3: 23 Observations |	Sodium of 226 mg, highest vitamins
+Cluster 4: 9 Observations |	Calories 82, sugars 2.3 g, fat 0.1 g, sodium about 2 mg, rating 63
+
+The best school choice is cluster 4, which includes Puffed Rice, Puffed Wheat, the Shredded Wheat varieties, Maypo, Frosted Mini-Wheats, Raisin Squares and Strawberry Fruit Wheats. It has very low sodium and fat and little sugar, though fiber is only moderate (about 2 g). 
+
+Two cautions:
+
+Frosted Mini-Wheats (7 g sugar) and Raisin Squares (6 g) are the weakest members of cluster 4 on sugar.
+Cluster membership depends on the variable set. To be sure it matches the schools’ goals, we could add hard cutoffs, for example sugars of 6 g or less and sodium of 150 mg or less, on top of the cluster.
+
+
+
+
+
+
+
+
+
+
+
